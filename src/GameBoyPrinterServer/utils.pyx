@@ -62,7 +62,7 @@ cpdef str save_image(image_data, str output_dir):
     file_uuid = uuid.uuid1(node=NODE)
     file_path = output_dir + (path_sep if not output_dir.endswith(path_sep) else '') + str(file_uuid) + '.bmp'
     output_image = Image.fromarray(np.array(image_data, dtype=np.uint8), "RGB")
-    print("Image size: %dx%d" % output_image.size)
+    #print("Image size: %dx%d" % output_image.size)
     output_image.save(file_path)
     return file_path
 

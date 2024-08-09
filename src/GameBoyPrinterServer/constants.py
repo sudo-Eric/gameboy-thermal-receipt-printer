@@ -1,23 +1,21 @@
+import datetime
 import cython
-import os
 import random
+import os
 
 # Info
 NAME = 'Game Boy Printer Server'
 VERSION = '1.0'
 DESCRIPTION = 'A program to allow a GameBoy to print to a standard thermal printer'
 
-COMPILED: cython.bint = cython.compiled
-DISPLAY_DETAILED_ABOUT: cython.bint = True
-
 # Paths
 TMP_FOLDER_NAME = 'GameBoyPrinter'
 if os.name == 'nt':
-    PATH_TMP = os.getenv("SystemDrive") + os.sep + 'temp' + os.sep + TMP_FOLDER_NAME + os.sep
+    PATH_TMP = os.path.join(os.getenv("TEMP"), TMP_FOLDER_NAME)
 elif os.name == 'posix':
-    PATH_TMP = os.sep + 'tmp' + os.sep + TMP_FOLDER_NAME + os.sep
+    PATH_TMP = os.path.join(os.sep, 'tmp', TMP_FOLDER_NAME)
 else:
-    PATH_TMP = '.' + os.sep
+    PATH_TMP = os.path.join('.', TMP_FOLDER_NAME)
 
 # Color table
 COLOR_TABLE_LOOKUP = {
@@ -36,4 +34,10 @@ COLOR_PALLET_NAMES = list(COLOR_TABLE_LOOKUP.keys())
 DEFAULT_PALLET: cython.int = 1
 
 # Random constants
-NODE: cython.int = random.randint(0x000000000000, 0xFFFFFFFFFFFF)
+NODE: cython.int = random.getrandbits(48) | (1 << 40)
+
+# Other constants
+DEFAULT_CONFIG_NAME = 'config.ini'
+SCALE_RANGE = range(1, 6)
+DUMMY_SERIAL_PREFIX = 'DUMMY'
+LOG_FILE_NAME = "log_%s.log" % datetime.datetime.now().replace(microsecond=0).isoformat()

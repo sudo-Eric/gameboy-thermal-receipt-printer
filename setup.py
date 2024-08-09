@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 from setuptools import setup
 from Cython.Build import cythonize
 
@@ -12,9 +14,13 @@ setup(
         'numpy>=1.26.4',
         'python-escpos~=3.1',
         'pyserial>=3.5'],
-    ext_modules=cythonize([
-        "src/*.py",
-        "src/GameBoyPrinterServer/*.py",
-        "src/GameBoyPrinterServer/*.pyx"
-    ], language_level='3str', annotate=True)
+    ext_modules=cythonize(
+        [
+            "src/*.py",
+            "src/GameBoyPrinterServer/*.py",
+            "src/GameBoyPrinterServer/*.pyx"
+        ],
+        language_level='3str',
+        annotate=True
+    )
 )

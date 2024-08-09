@@ -1,8 +1,9 @@
 import cython
+from cpython.ref cimport PyObject
 import numpy as np
+import logging
 
 import src.GameBoyPrinterServer.constants as constants
-import src.GameBoyPrinterServer.log as log
 
 cdef str EMPTY_STRING = ''
 cdef str NEWLINE_STRING = '\n'
@@ -57,6 +58,7 @@ cdef class PacketDecoder:
     cdef list processed_data, finished_image
     cdef bint data_end_packet_received, print_data_ready
     cdef bint ignore_checksum_errors
+    cdef object logger
 
     def __init__(self):
         self.VERBOSITY = 0
@@ -67,6 +69,7 @@ cdef class PacketDecoder:
         self.ignore_checksum_errors = True
         self.COLOR_LUT = np.empty((4,3), dtype=np.uint8)
         self.set_color_pallet(constants.DEFAULT_PALLET)
+        self.logger = logging.getLogger('packet_decoder')
 
     cpdef set_verbosity(self, char verbosity):
         if verbosity < 0:
@@ -97,15 +100,16 @@ cdef class PacketDecoder:
         cdef bint compressed
 
         if data_len < 10:
-            log.error("Packet size too small") #TODO Should this be a warning?
+            self.logger.error("Packet size too small") #TODO Should this be a warning?
 
         with cython.boundscheck(True):
             with cython.wraparound(False):
                 if not (packet_data[0] == 0x88 and packet_data[1] == 0x33):
-                    log.error("Error in packet data sync bytes") #TODO Should this be a warning?
+                    self.logger.error("Error in packet data sync bytes") #TODO Should this be a warning?
                     return
 
                 #TODO Checksum calculations are unstable. Find a way to fix.
+                checksum = 0
                 for i in range(2, data_len - 4):
                     checksum += packet_data[i]
                 calc_hb = (checksum & 0xFF00) >> 8
@@ -113,101 +117,101 @@ cdef class PacketDecoder:
                 chk_hb = packet_data[data_len - 3]
                 chk_lb = packet_data[data_len - 4]
                 if not (chk_hb == calc_hb and chk_lb == calc_lb):
-                    log.warn("Checksum error in packet")
-                    log.warn("Expected\t%s %s" % (chk_hb, chk_lb))
-                    log.warn("Received\t%s %s" % (calc_hb, calc_lb))
+                    self.logger.warning("Checksum error in packet")
+                    self.logger.warning("Expected\t%s %s" % (chk_hb, chk_lb))
+                    self.logger.warning("Received\t%s %s" % (calc_hb, calc_lb))
                     if not self.ignore_checksum_errors:
                         return
 
                 packet_type = packet_data[2]
 
                 if packet_type == 0x01:  # Initialize packet
-                    log.info("Initialize packet")
+                    self.logger.info("Initialize packet")
                     if not data_len == 10:
-                        log.warn("* Length of initialize packet incorrect")
+                        self.logger.warning("* Length of initialize packet incorrect")
                         return
                     if not (packet_data[3] == 0x00 and packet_data[4] == 0x00 and packet_data[5] == 0x00):
-                        log.warn("* Error in initialize packet header")
+                        self.logger.warning("* Error in initialize packet header")
                         return
-                    log.info("* Printer initialized")
+                    self.logger.info("* Printer initialized")
 
                 elif packet_type == 0x02:  # Print instruction packet
-                    log.info("Print instruction packet")
+                    self.logger.info("Print instruction packet")
                     if not data_len == 14:
-                        log.warn("* Length of print packet incorrect")
+                        self.logger.warning("* Length of print packet incorrect")
                         return
                     if not (packet_data[3] == 0x00 and packet_data[4] == 0x04 and packet_data[5] == 0x00):
-                        log.warn("* Error in print packet header")
+                        self.logger.warning("* Error in print packet header")
                         return
                     sheets = packet_data[6]
-                    log.info("* Sheets:\t\t" + str(sheets))
+                    self.logger.info("* Sheets:\t\t" + str(sheets))
                     lf_before = (packet_data[7] & 0xF0) >> 4
                     lf_after = packet_data[7] & 0x0F
-                    log.info("* LF before:\t" + str(lf_before))
-                    log.info("* LF after:\t\t" + str(lf_after))
+                    self.logger.info("* LF before:\t" + str(lf_before))
+                    self.logger.info("* LF after:\t\t" + str(lf_after))
                     pallet = packet_data[8]
-                    log.info("* Pallet:\t\t" + ("0x%0.2X" % pallet))
+                    self.logger.info("* Pallet:\t\t" + ("0x%0.2X" % pallet))
                     density = packet_data[9]
-                    log.info("* Density:\t\t" + "{0:+.2f}%".format((density / 254) - 0.25))
+                    self.logger.info("* Density:\t\t" + "{0:+.2f}%".format((density / 254) - 0.25))
                     if self.data_end_packet_received:
                         if lf_after != 0:
-                            log.info("Image transmission finished")
+                            self.logger.info("Image transmission finished")
                             self.adjust_pallet(pallet)
-                            log.info("Pallet adjusted")
+                            self.logger.info("Pallet adjusted")
                             self.finished_image = self.processed_data
                             self.processed_data = []
                             self.print_data_ready = True
                         else:
-                            log.info("* Multi-screen image print")
+                            self.logger.info("* Multi-screen image print")
                         self.data_end_packet_received = False
                     else:
-                        log.warn("Print command issued before image-end packet sent")
+                        self.logger.warning("Print command issued before image-end packet sent")
 
                 elif packet_type == 0x04:  # Data packet
-                    log.info("Data packet")
+                    self.logger.info("Data packet")
                     data_length = (packet_data[4] + (packet_data[5] << 8))
                     compressed = packet_data[3] != 0x00
                     if not data_len == data_length + 10:
-                        log.warn("* Length of data packet incorrect")
+                        self.logger.warning("* Length of data packet incorrect")
                         return
                     if data_length == 0:
-                        log.info("* Data-End packet")
+                        self.logger.info("* Data-End packet")
                         self.data_end_packet_received = True
                     else:
-                        log.info("* Length:\t\t" + str(data_length))
-                        log.info("* Compressed:\t" + str(compressed))
+                        self.logger.info("* Length:\t\t" + str(data_length))
+                        self.logger.info("* Compressed:\t" + str(compressed))
                         self.decode_packet_image_data(packet_data[6:data_len-4], compressed)
 
                 elif packet_type == 0x08:  # Break packet
-                    log.info("Break packet")
+                    self.logger.info("Break packet")
                     if not data_len == 10:
-                        log.warn("* Length of break packet incorrect")
+                        self.logger.warning("* Length of break packet incorrect")
                         return
                     if not (packet_data[3] == 0x00 and packet_data[4] == 0x00 and packet_data[5] == 0x00):
-                        log.warn("* Error in break packet header")
+                        self.logger.warning("* Error in break packet header")
                         return
 
                 elif packet_type == 0x0F:  # NUL packet (Inquiry packet)
-                    log.info("NUL packet")
+                    self.logger.info("NUL packet")
                     if not data_len == 10:
-                        log.warn("* Length of NUL packet incorrect")
+                        self.logger.warning("* Length of NUL packet incorrect")
                         return
                     if not (packet_data[3] == 0x00 and packet_data[4] == 0x00 and packet_data[5] == 0x00):
-                        log.warn("* Error in NUL packet header")
+                        self.logger.warning("* Error in NUL packet header")
                         return
 
                 else:
-                    log.error("Unknown command") #TODO Should this be a warning?
+                    self.logger.error("Unknown command") #TODO Should this be a warning?
 
                 # Check printer status
                 if packet_data[data_len - 2] == 0xFF and packet_data[data_len - 1] == 0xFF:
-                    log.warn("* Printer is off or disconnected")
+                    self.logger.warning("* Printer is off or disconnected")
                     return
                 if not (packet_data[data_len - 2] == 0x81):
-                    log.warn("* Response not from printer")
+                    self.logger.warning("* Response not from printer")
                 status = __PrinterStatus(packet_data[data_len - 1])
                 if status.any():
-                    log.info(status.get_status_string()) #TODO Enhance status printing
+                    self.logger.info(status.get_status_string()) #TODO Enhance status printing
 
     cdef decode_packet_image_data(self, unsigned char[:] data, bint compressed):
         cdef int width = 40
@@ -247,11 +251,11 @@ cdef class PacketDecoder:
                                 new_data[j] = value
                                 j += 1
                     if i != data_len:
-                        log.error("* Error in decompression of compressed data")
+                        self.logger.error("* Error in decompression of compressed data")
                     data = new_data
 
                 if len(data) != data_packet_valid_size:
-                    log.warn("* Data size incorrect!")
+                    self.logger.self.logger.warning("* Data size incorrect!")
                     return
 
                 i = 0
