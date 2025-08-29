@@ -157,7 +157,7 @@ class GameBoyPrinterService:
     def start(self):
         logging.debug('%s running', constants.NAME)
         for i in range(500):
-            decoded_line = utils.decode_line(self.ser.readline())
+            decoded_line = utils.decode_line(self.ser.readline().decode("utf-8"))
             if decoded_line is None:
                 continue
             else:
@@ -172,7 +172,7 @@ class GameBoyPrinterService:
                     image_file_location = utils.save_image(image_data, self.output_dir)
                     logging.info("Image saved to %s", image_file_location)
                     logging.info("Printing image")
-                    self.printer.image(image_file_location)
+                    self.printer.image(image_file_location, center=True)
                     self.printer.cut()
                 # print()
 
